@@ -17,17 +17,33 @@ ZTools 插件：扫描本机应用、手动分类，并把启动组注册为 ZTo
 
 ```bash
 npm i
-npm run dev          # Vite 开发服务（配合 plugin.json development.main）
-npm run build        # 产出 dist/（含 plugin.json、preload.js、UI）
-npm test             # 单元测试
+npm run dev          # Vite 开发服务（配合 development.main）
+npm run build        # UI → src-ztools/dist，preload → src-ztools/preload/services.js
+npm test
 ```
 
-## 加载插件
+完整可安装插件目录是 **`src-ztools/`**（与官方 CLI Vue 模板一致），不是源码根目录，也不是单独的 `dist/`。
 
-1. 执行 `npm run build`
-2. 在 ZTools 中加载本仓库的 **`dist/`** 目录作为插件（构建会把 `plugin.json` 复制到 `dist/`）
+## 本地安装（ZTools）
 
-开发时可先 `npm run dev`，再按 ZTools 开发模式指向 `http://localhost:5173`。
+依据官方 [CLI Vue 模板](https://github.com/ZToolsCenter/ztools-plugin-cli/tree/main/templates/vue-vite)、[目录结构](https://ztoolscenter.github.io/ZTools-doc/file-structure.html)、[Vibe Coding](https://ztoolscenter.github.io/ZTools-doc/vibe-coding.html)：
+
+1. 构建：
+
+```bash
+npm i
+npm run build
+```
+
+2. ZTools → **插件管理** → **本地安装**
+3. 选择文件夹：**`D:\MyWorkSpace\zTools-BatchStart\src-ztools`**
+   - 或安装打包好的 `batch-start-plugin.zip`（内容为 `src-ztools`）
+4. 若之前装过错误目录，请先卸载旧插件再装
+5. 主搜索 **「批量启动」**
+
+说明：`vite` 必须使用 `base: './'`，否则 `index.html` 里的 `/assets/...` 在 ZTools 的 file 协议下会变成空白页。
+
+开发热更新：先 `npm run dev`，本地安装/开发模式加载 `src-ztools`（`development.main` → `http://localhost:5173`）。
 
 ## 用法
 

@@ -6,47 +6,61 @@ import { defineConfig, build as viteBuild, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const pluginRoot = path.resolve(__dirname, 'src-ztools')
 
 const nodeExternals = [
   ...builtinModules,
   ...builtinModules.map((m) => `node:${m}`),
 ]
 
+/** Align with official CLI vue-vite template: UI → src-ztools/dist, preload → src-ztools/preload/services.js */
 function ztoolsPluginBuild(): Plugin {
   return {
     name: 'ztools-plugin-build',
     async closeBundle() {
+      const preloadDir = path.join(pluginRoot, 'preload')
+      if (!existsSync(preloadDir)) {
+        mkdirSync(preloadDir, { recursive: true })
+      }
+
       await viteBuild({
         configFile: false,
+        publicDir: false,
         build: {
-          outDir: 'dist',
+          outDir: preloadDir,
           emptyOutDir: false,
+          copyPublicDir: false,
           lib: {
             entry: path.resolve(__dirname, 'src/preload.ts'),
             formats: ['cjs'],
-            fileName: () => 'preload.js',
+            fileName: () => 'services.js',
           },
           rollupOptions: {
             external: nodeExternals,
             output: {
-              entryFileNames: 'preload.js',
+              entryFileNames: 'services.js',
+              format: 'cjs',
+              exports: 'named',
             },
           },
         },
         logLevel: 'warn',
       })
 
-      const dist = path.resolve(__dirname, 'dist')
-      if (!existsSync(dist)) {
-        mkdirSync(dist, { recursive: true })
+      // remove accidental public assets if any
+      const strayLogo = path.join(preloadDir, 'logo.png')
+      if (existsSync(strayLogo)) {
+        try {
+          const { unlinkSync } = await import('node:fs')
+          unlinkSync(strayLogo)
+        } catch {
+          // ignore
+        }
       }
-      copyFileSync(
-        path.resolve(__dirname, 'plugin.json'),
-        path.join(dist, 'plugin.json'),
-      )
+
       const logoSrc = path.resolve(__dirname, 'public/logo.png')
       if (existsSync(logoSrc)) {
-        copyFileSync(logoSrc, path.join(dist, 'logo.png'))
+        copyFileSync(logoSrc, path.join(pluginRoot, 'logo.png'))
       }
     },
   }
@@ -54,9 +68,12 @@ function ztoolsPluginBuild(): Plugin {
 
 export default defineConfig({
   plugins: [vue(), ztoolsPluginBuild()],
+  // Required for ZTools file:// loading — absolute /assets/* will blank the page
+  base: './',
   publicDir: 'public',
   build: {
-    outDir: 'dist',
+    // Official CLI template outDir
+    outDir: 'src-ztools/dist',
     emptyOutDir: true,
   },
 })

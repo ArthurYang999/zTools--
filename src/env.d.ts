@@ -46,6 +46,7 @@ declare global {
     batchStart: BatchStartApi
     ztools?: {
       showToast?: (message: string, options?: Record<string, unknown>) => unknown
+      setExpendHeight?: (height: number) => void
     }
   }
 }

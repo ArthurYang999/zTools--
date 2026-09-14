@@ -31,6 +31,10 @@ const canTrialRun = computed(() => selectedGroupId.value != null || !!draft.valu
 async function loadAll() {
   loadError.value = null
   try {
+    if (!window.batchStart) {
+      loadError.value = 'preload 未注入 window.batchStart，请确认安装的是 src-ztools 目录且已重新构建'
+      return
+    }
     const [a, c, g, s] = await Promise.all([
       api().listApps(),
       api().listCategories(),
@@ -236,6 +240,11 @@ async function onRetrySync() {
 }
 
 onMounted(async () => {
+  try {
+    window.ztools?.setExpendHeight?.(560)
+  } catch {
+    // host optional
+  }
   await loadAll()
 })
 </script>
