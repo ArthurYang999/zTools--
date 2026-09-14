@@ -32,4 +32,16 @@ describe('createWinScanner', () => {
     })
     await expect(scanner.scanCustomDir('C:/Missing')).resolves.toEqual([])
   })
+
+  it('scanCustomDir returns [] when readdir throws EACCES', async () => {
+    const err = Object.assign(new Error('EACCES'), { code: 'EACCES' })
+    const scanner = createWinScanner({
+      readdir: async () => {
+        throw err
+      },
+      stat: async () => ({ isFile: () => true, isDirectory: () => false }),
+      resolveLnk: async () => null,
+    })
+    await expect(scanner.scanCustomDir('C:/Denied')).resolves.toEqual([])
+  })
 })

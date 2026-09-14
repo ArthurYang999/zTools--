@@ -16,8 +16,10 @@ export type MacScannerDeps = {
   join?: (...parts: string[]) => string
 }
 
-function isMissingError(err: unknown): boolean {
-  return Boolean(err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'ENOENT')
+function isSkippableScanError(err: unknown): boolean {
+  if (!err || typeof err !== 'object' || !('code' in err)) return false
+  const code = (err as { code?: string }).code
+  return code === 'ENOENT' || code === 'EACCES' || code === 'EPERM'
 }
 
 function isExecutable(st: MacStatLike): boolean {
@@ -44,7 +46,7 @@ export function createMacScanner(deps: MacScannerDeps = {}): PlatformScanner {
     try {
       entries = await readdir(dir)
     } catch (err) {
-      if (isMissingError(err)) return []
+      if (isSkippableScanError(err)) return []
       throw err
     }
 
@@ -54,7 +56,7 @@ export function createMacScanner(deps: MacScannerDeps = {}): PlatformScanner {
       try {
         st = await stat(full)
       } catch (err) {
-        if (isMissingError(err)) continue
+        if (isSkippableScanError(err)) continue
         throw err
       }
 
@@ -93,7 +95,7 @@ export function createMacScanner(deps: MacScannerDeps = {}): PlatformScanner {
       try {
         return await collectApps(dir, { includeExecutables: true })
       } catch (err) {
-        if (isMissingError(err)) return []
+        if (isSkippableScanError(err)) return []
         throw err
       }
     },

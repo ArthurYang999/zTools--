@@ -17,8 +17,10 @@ export type LinuxScannerDeps = {
   join?: (...parts: string[]) => string
 }
 
-function isMissingError(err: unknown): boolean {
-  return Boolean(err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'ENOENT')
+function isSkippableScanError(err: unknown): boolean {
+  if (!err || typeof err !== 'object' || !('code' in err)) return false
+  const code = (err as { code?: string }).code
+  return code === 'ENOENT' || code === 'EACCES' || code === 'EPERM'
 }
 
 function isExecutable(st: LinuxStatLike): boolean {
@@ -83,7 +85,7 @@ export function createLinuxScanner(deps: LinuxScannerDeps = {}): PlatformScanner
     try {
       entries = await readdir(dir)
     } catch (err) {
-      if (isMissingError(err)) return []
+      if (isSkippableScanError(err)) return []
       throw err
     }
 
@@ -94,7 +96,7 @@ export function createLinuxScanner(deps: LinuxScannerDeps = {}): PlatformScanner
       try {
         st = await stat(full)
       } catch (err) {
-        if (isMissingError(err)) continue
+        if (isSkippableScanError(err)) continue
         throw err
       }
       if (!st.isFile()) continue
@@ -103,7 +105,7 @@ export function createLinuxScanner(deps: LinuxScannerDeps = {}): PlatformScanner
       try {
         content = await readFile(full, 'utf8')
       } catch (err) {
-        if (isMissingError(err)) continue
+        if (isSkippableScanError(err)) continue
         throw err
       }
 
@@ -126,7 +128,7 @@ export function createLinuxScanner(deps: LinuxScannerDeps = {}): PlatformScanner
     try {
       entries = await readdir(dir)
     } catch (err) {
-      if (isMissingError(err)) return []
+      if (isSkippableScanError(err)) return []
       throw err
     }
 
@@ -136,7 +138,7 @@ export function createLinuxScanner(deps: LinuxScannerDeps = {}): PlatformScanner
       try {
         st = await stat(full)
       } catch (err) {
-        if (isMissingError(err)) continue
+        if (isSkippableScanError(err)) continue
         throw err
       }
       if (!st.isFile() || !isExecutable(st)) continue
@@ -167,7 +169,7 @@ export function createLinuxScanner(deps: LinuxScannerDeps = {}): PlatformScanner
       try {
         return await scanExecutables(dir)
       } catch (err) {
-        if (isMissingError(err)) return []
+        if (isSkippableScanError(err)) return []
         throw err
       }
     },

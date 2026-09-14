@@ -26,8 +26,10 @@ function displayName(filePath: string): string {
   return path.basename(filePath, path.extname(filePath))
 }
 
-function isMissingError(err: unknown): boolean {
-  return Boolean(err && typeof err === 'object' && 'code' in err && (err as { code?: string }).code === 'ENOENT')
+function isSkippableScanError(err: unknown): boolean {
+  if (!err || typeof err !== 'object' || !('code' in err)) return false
+  const code = (err as { code?: string }).code
+  return code === 'ENOENT' || code === 'EACCES' || code === 'EPERM'
 }
 
 async function defaultResolveLnk(lnkPath: string): Promise<{ name: string; target: string } | null> {
@@ -77,7 +79,7 @@ export function createWinScanner(deps: WinScannerDeps = {}): PlatformScanner {
       try {
         entries = await readdir(current)
       } catch (err) {
-        if (isMissingError(err)) return
+        if (isSkippableScanError(err)) return
         throw err
       }
 
@@ -87,7 +89,7 @@ export function createWinScanner(deps: WinScannerDeps = {}): PlatformScanner {
         try {
           st = await stat(full)
         } catch (err) {
-          if (isMissingError(err)) continue
+          if (isSkippableScanError(err)) continue
           throw err
         }
 
@@ -149,7 +151,7 @@ export function createWinScanner(deps: WinScannerDeps = {}): PlatformScanner {
       try {
         return await collectFromDir(dir, { maxDepth: CUSTOM_MAX_DEPTH, lnkOnly: false })
       } catch (err) {
-        if (isMissingError(err)) return []
+        if (isSkippableScanError(err)) return []
         throw err
       }
     },
