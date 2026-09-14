@@ -4,7 +4,7 @@ import AppList from './components/AppList.vue'
 import CategorySidebar from './components/CategorySidebar.vue'
 import GroupPanel, { type GroupDraft } from './components/GroupPanel.vue'
 import TopBar from './components/TopBar.vue'
-import type { AppDoc, CategoryDoc, GroupDoc, SettingsDoc } from './types'
+import type { AppDoc, CategoryDoc, GroupDoc, LaunchResult, SettingsDoc } from './types'
 
 const apps = ref<AppDoc[]>([])
 const categories = ref<CategoryDoc[]>([])
@@ -26,7 +26,6 @@ const api = () => window.batchStart
 const lastScanAt = computed(() => settings.value?.lastScanAt ?? null)
 const hasApps = computed(() => apps.value.length > 0)
 const hasGroups = computed(() => groups.value.length > 0)
-const hasCurrentGroup = computed(() => draft.value != null)
 const canTrialRun = computed(() => selectedGroupId.value != null || !!draft.value?.id)
 
 async function loadAll() {
@@ -113,12 +112,22 @@ async function onAddDir() {
   })
 }
 
+function showTrialRunFeedback(result: LaunchResult) {
+  const message = `试跑完成：成功 ${result.success} / 失败 ${result.failed}`
+  const showToast = window.ztools?.showToast
+  if (typeof showToast === 'function') {
+    void Promise.resolve(showToast(message))
+    return
+  }
+  window.alert(message)
+}
+
 async function onTrialRun() {
   const id = draft.value?.id ?? selectedGroupId.value
   if (!id) return
   await withBusy(async () => {
     const result = await api().launchGroup(id)
-    window.alert(`试跑完成：成功 ${result.success} / 失败 ${result.failed}`)
+    showTrialRunFeedback(result)
   })
 }
 
@@ -165,13 +174,11 @@ async function onAssignCategory(appId: string, categoryId: string | null) {
 }
 
 function addSelectedToGroup() {
-  if (!draft.value) {
-    createGroup()
-  }
-  if (!draft.value) return
-  const set = new Set(draft.value.appIds)
+  if (!draft.value) createGroup()
+  const current = draft.value!
+  const set = new Set(current.appIds)
   for (const id of selectedAppIds.value) set.add(id)
-  draft.value = { ...draft.value, appIds: [...set] }
+  draft.value = { ...current, appIds: [...set] }
 }
 
 function removeMember(appId: string) {
@@ -269,7 +276,6 @@ onMounted(async () => {
         :selected-category-id="selectedCategoryId"
         :selected-app-ids="selectedAppIds"
         :search-query="searchQuery"
-        :has-current-group="hasCurrentGroup"
         @update:search-query="searchQuery = $event"
         @toggle-select="toggleSelect"
         @assign-category="onAssignCategory"

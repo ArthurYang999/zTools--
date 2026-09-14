@@ -8,7 +8,6 @@ const props = defineProps<{
   selectedCategoryId: string | null
   selectedAppIds: string[]
   searchQuery: string
-  hasCurrentGroup: boolean
 }>()
 
 const emit = defineEmits<{
@@ -53,7 +52,7 @@ function onAssign(appId: string, event: Event) {
         <button
           class="btn btn-sm btn-primary"
           type="button"
-          :disabled="!hasCurrentGroup || selectedAppIds.length === 0"
+          :disabled="selectedAppIds.length === 0"
           @click="emit('addSelectedToGroup')"
         >
           加入当前组

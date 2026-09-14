@@ -44,6 +44,9 @@ export interface BatchStartApi {
 declare global {
   interface Window {
     batchStart: BatchStartApi
+    ztools?: {
+      showToast?: (message: string, options?: Record<string, unknown>) => unknown
+    }
   }
 }
 
