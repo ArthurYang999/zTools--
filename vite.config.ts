@@ -1,10 +1,16 @@
 import { copyFileSync, existsSync, mkdirSync } from 'node:fs'
+import { builtinModules } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, build as viteBuild, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+const nodeExternals = [
+  ...builtinModules,
+  ...builtinModules.map((m) => `node:${m}`),
+]
 
 function ztoolsPluginBuild(): Plugin {
   return {
@@ -21,6 +27,7 @@ function ztoolsPluginBuild(): Plugin {
             fileName: () => 'preload.js',
           },
           rollupOptions: {
+            external: nodeExternals,
             output: {
               entryFileNames: 'preload.js',
             },
