@@ -1,5 +1,6 @@
 import { mergeScannedApps } from '../appLibrary'
 import { getSettings, type ZtoolsDb } from '../db'
+import { rejectUninstallApps } from './filter'
 import { createLinuxScanner } from './linux'
 import { createMacScanner } from './mac'
 import type { PlatformScanner, ScannedApp } from './types'
@@ -9,6 +10,7 @@ export type { PlatformScanner, ScannedApp } from './types'
 export { createWinScanner } from './win'
 export { createMacScanner } from './mac'
 export { createLinuxScanner } from './linux'
+export { isUninstallEntry, rejectUninstallApps } from './filter'
 
 export function getScanner(platform: string = process.platform): PlatformScanner {
   switch (platform) {
@@ -35,9 +37,9 @@ export async function runFullScan(
   const scanner = deps.scanner ?? getScanner(platform)
   const settings = await getSettings(db)
 
-  const scanned: ScannedApp[] = [...(await scanner.scanSystem())]
+  const scanned: ScannedApp[] = rejectUninstallApps([...(await scanner.scanSystem())])
   for (const dir of settings.customScanDirs) {
-    scanned.push(...(await scanner.scanCustomDir(dir)))
+    scanned.push(...rejectUninstallApps(await scanner.scanCustomDir(dir)))
   }
 
   const apps = await mergeScannedApps(db, scanned)

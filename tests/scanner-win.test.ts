@@ -72,4 +72,27 @@ describe('createWinScanner', () => {
     })
     await expect(scanner.scanCustomDir('C:/Denied')).resolves.toEqual([])
   })
+
+  it('skips uninstall shortcuts before resolving', async () => {
+    const resolveLnks = vi.fn(async (paths: string[]) => {
+      const map = new Map<string, string>()
+      for (const p of paths) map.set(p, p.replace(/\.lnk$/i, '.exe'))
+      return map
+    })
+    const scanner = createWinScanner({
+      readdir: async () =>
+        ['Uninstall Foo.lnk', '卸载 Bar.lnk', 'Foo.lnk'].map((name) => ({
+          name,
+          isFile: () => true,
+          isDirectory: () => false,
+        })),
+      resolveLnks,
+    })
+    const apps = await scanner.scanCustomDir('C:/Menu')
+    expect(apps.map((a) => a.name)).toEqual(['Foo'])
+    expect(resolveLnks).toHaveBeenCalledTimes(1)
+    const passed = resolveLnks.mock.calls[0][0] as string[]
+    expect(passed).toHaveLength(1)
+    expect(passed[0].endsWith('Foo.lnk')).toBe(true)
+  })
 })

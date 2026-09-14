@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import type { PlatformScanner, ScannedApp } from './types'
+import { isUninstallEntry, rejectUninstallApps } from './filter'
 
 const execFileAsync = promisify(execFile)
 
@@ -156,10 +157,14 @@ export function createWinScanner(deps: WinScannerDeps = {}): PlatformScanner {
         }
 
         if (ext === '.lnk') {
+          // Skip uninstall shortcuts before expensive COM resolve
+          if (isUninstallEntry(displayName(entry.name), full)) continue
           lnkPaths.push(full)
         } else {
+          const name = displayName(entry.name)
+          if (isUninstallEntry(name, full)) continue
           files.push({
-            name: displayName(entry.name),
+            name,
             path: full,
             platform: 'win32',
           })
@@ -190,14 +195,16 @@ export function createWinScanner(deps: WinScannerDeps = {}): PlatformScanner {
     for (const lnk of lnkPaths) {
       const target = targets.get(lnk)
       if (!target) continue
+      const name = displayName(lnk)
+      if (isUninstallEntry(name, target)) continue
       // Display name from Node path — preserves Chinese correctly
       fromLnks.push({
-        name: displayName(lnk),
+        name,
         path: target,
         platform: 'win32',
       })
     }
-    return [...files, ...fromLnks]
+    return rejectUninstallApps([...files, ...fromLnks])
   }
 
   return {
