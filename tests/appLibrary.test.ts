@@ -22,4 +22,23 @@ describe('appLibrary', () => {
     expect(apps[0].categoryId).toBe('category:x')
     expect(apps[0].name).toBe('Old')
   })
+
+  it('mergeScannedApps matches paths case-insensitively', async () => {
+    const db = createMemoryDb()
+    await upsertApp(db, {
+      _id: makeAppId('1'),
+      name: 'Old',
+      path: 'C:/Tool/a.exe',
+      source: 'scan',
+      categoryId: 'category:x',
+      platform: 'win32',
+    })
+    await mergeScannedApps(db, [
+      { name: 'New', path: 'c:/tool/A.exe', platform: 'win32' },
+    ])
+    const apps = await listApps(db)
+    expect(apps).toHaveLength(1)
+    expect(apps[0].categoryId).toBe('category:x')
+    expect(apps[0].name).toBe('Old')
+  })
 })
