@@ -42,6 +42,7 @@ export async function mergeScannedApps(
 ): Promise<AppDoc[]> {
   const existing = await listApps(db)
   const byPath = new Map(existing.map((a) => [normalizePath(a.path), a]))
+  const toWrite: AppDoc[] = []
 
   for (const item of scanned) {
     const key = normalizePath(item.path)
@@ -52,7 +53,11 @@ export async function mergeScannedApps(
         platform: item.platform,
         ...(item.icon !== undefined ? { icon: item.icon } : {}),
       }
-      await upsertApp(db, updated)
+      // Refresh names for scan-sourced apps (fixes prior encoding issues on re-scan)
+      if (match.source === 'scan' && item.name) {
+        updated.name = item.name
+      }
+      toWrite.push(updated)
       byPath.set(key, updated)
     } else {
       const doc: AppDoc = {
@@ -64,8 +69,21 @@ export async function mergeScannedApps(
         categoryId: null,
         platform: item.platform,
       }
-      await upsertApp(db, doc)
+      toWrite.push(doc)
       byPath.set(key, doc)
+    }
+  }
+
+  if (toWrite.length > 0) {
+    if (db.bulkDocs) {
+      await db.bulkDocs(toWrite)
+    } else {
+      // Fallback: parallel puts in chunks
+      const CHUNK = 40
+      for (let i = 0; i < toWrite.length; i += CHUNK) {
+        const chunk = toWrite.slice(i, i + CHUNK)
+        await Promise.all(chunk.map((doc) => db.put(doc)))
+      }
     }
   }
 

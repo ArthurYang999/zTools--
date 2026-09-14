@@ -20,7 +20,8 @@ describe('appLibrary', () => {
     const apps = await listApps(db)
     expect(apps).toHaveLength(1)
     expect(apps[0].categoryId).toBe('category:x')
-    expect(apps[0].name).toBe('Old')
+    // scan-sourced names refresh on re-scan
+    expect(apps[0].name).toBe('New')
   })
 
   it('mergeScannedApps matches paths case-insensitively', async () => {
@@ -39,6 +40,6 @@ describe('appLibrary', () => {
     const apps = await listApps(db)
     expect(apps).toHaveLength(1)
     expect(apps[0].categoryId).toBe('category:x')
-    expect(apps[0].name).toBe('Old')
+    expect(apps[0].name).toBe('New')
   })
 })

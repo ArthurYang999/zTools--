@@ -19,6 +19,7 @@ export type ZtoolsDb = {
   get: (id: string) => Promise<object | null>
   remove: (docOrId: object | string) => Promise<object>
   allDocs: (key?: string) => Promise<object[]>
+  bulkDocs?: (docs: object[]) => Promise<object[]>
 }
 
 export function getDb(): ZtoolsDb {
