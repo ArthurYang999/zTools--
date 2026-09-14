@@ -51,6 +51,7 @@ type ZtoolsHost = {
   showToast: (message: string, options?: Record<string, unknown>) => Promise<unknown> | unknown
   outPlugin: (isKill?: boolean) => Promise<unknown> | unknown
   onPluginEnter: (callback: (param: { code?: string }) => void) => void
+  onPluginOut: (callback: (isKill: boolean) => void) => void
   shellOpenPath: (fullPath: string) =>
     | Promise<{ success: boolean; error?: string }>
     | { success: boolean; error?: string }
@@ -192,8 +193,19 @@ const batchStart = {
 
 window.batchStart = batchStart
 
+// Do not keep the plugin resident in background after dismiss / group launch.
+host().onPluginOut((isKill) => {
+  if (!isKill) {
+    void Promise.resolve(host().outPlugin(true))
+  }
+})
+
 host().onPluginEnter(async (param) => {
-  await reconcileFeatures(db(), featureApi())
+  try {
+    await reconcileFeatures(db(), featureApi())
+  } catch {
+    // feature sync failure should not block launch / manage
+  }
   const action = routePluginEnter(param?.code)
 
   if (action.type === 'launch-group') {
@@ -201,11 +213,12 @@ host().onPluginEnter(async (param) => {
     await Promise.resolve(
       host().showToast(`成功 ${result.success} / 失败 ${result.failed}`),
     )
-    await Promise.resolve(host().outPlugin())
+    // Kill process — only run when invoked
+    await Promise.resolve(host().outPlugin(true))
     return
   }
 
-  // manage: leave UI open
+  // manage: leave UI open until user exits (then onPluginOut kills)
 })
 
 export type BatchStartApi = typeof batchStart

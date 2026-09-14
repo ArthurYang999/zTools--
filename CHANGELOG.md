@@ -8,3 +8,4 @@
 - 扫描性能：批量 PowerShell、`withFileTypes`、入库 bulk/并行
 - 对齐官方 Vue 模板目录：`src-ztools/` + `base: './'`
 - 更换插件 Logo
+- 退出时 `outPlugin(true)`，仅在唤起时运行、不常驻后台
