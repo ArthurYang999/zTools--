@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2 - 2026-10-16
+
+- 修复启动组包含 ZTools 指令时，`outPlugin(true)` 过早退出导致目标插件装配被中止的问题
+- 启动组内 ZTools 指令改为串行 `redirect`，并在退出前等待装配完成
+
 ## 0.1.1 - 2026-09-17
 
 - 扫描时合并已安装插件的 **ZTools 文本指令** 到应用列表（排除 setting / system / batch-start）
