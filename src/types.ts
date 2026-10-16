@@ -46,4 +46,6 @@ export interface LaunchResult {
   success: number
   failed: number
   errors: Array<{ path: string; error: string }>
+  /** Present when launched via launchTargets — used to settle after ZTools redirects */
+  outcomes?: Array<{ path: string; ok: boolean; error: string; kind: 'path' | 'ztools' }>
 }

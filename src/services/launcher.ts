@@ -30,59 +30,88 @@ export async function launchPaths(paths: string[], openPath: OpenPath): Promise<
   )
 }
 
+export type LaunchOutcome = {
+  path: string
+  ok: boolean
+  error: string
+  kind: LaunchTarget['kind']
+}
+
+/** After redirect, host needs a beat before outPlugin or it aborts the target plugin mid-assembly. */
+export const ZTOOLS_REDIRECT_SETTLE_MS = 2000
+
+export function countSuccessfulZtoolsLaunches(outcomes: LaunchOutcome[]): number {
+  return outcomes.filter((o) => o.ok && o.kind === 'ztools').length
+}
+
+async function launchOne(
+  target: LaunchTarget,
+  deps: { openPath: OpenPath; redirect?: RedirectFn },
+): Promise<LaunchOutcome> {
+  try {
+    if (target.kind === 'ztools') {
+      const cmd = target.launchCmd?.trim()
+      if (!cmd) {
+        return {
+          path: target.key,
+          ok: false,
+          error: 'command has no divertible text',
+          kind: 'ztools',
+        }
+      }
+      const redirect = deps.redirect
+      if (!redirect) {
+        return { path: target.key, ok: false, error: 'redirect API unavailable', kind: 'ztools' }
+      }
+      const title = target.pluginTitle?.trim()
+      const label: string | [string, string] = title ? [title, cmd] : cmd
+      const ok = redirect(label)
+      if (!ok) {
+        return { path: target.key, ok: false, error: 'redirect failed', kind: 'ztools' }
+      }
+      return { path: target.key, ok: true, error: '', kind: 'ztools' }
+    }
+
+    const fullPath = target.path
+    if (!fullPath) {
+      return { path: target.key, ok: false, error: 'missing path', kind: 'path' }
+    }
+    const res = await Promise.resolve(deps.openPath(fullPath))
+    if (!res?.success) {
+      return { path: target.key, ok: false, error: res?.error || 'open failed', kind: 'path' }
+    }
+    return { path: target.key, ok: true, error: '', kind: 'path' }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : String(e)
+    return { path: target.key, ok: false, error: message, kind: target.kind }
+  }
+}
+
 export async function launchTargets(
   targets: LaunchTarget[],
   deps: {
     openPath: OpenPath
     redirect?: RedirectFn
   },
-): Promise<LaunchResult> {
-  const settled = await Promise.all(
-    targets.map(async (target) => {
-      try {
-        if (target.kind === 'ztools') {
-          const cmd = target.launchCmd?.trim()
-          if (!cmd) {
-            return {
-              path: target.key,
-              ok: false as const,
-              error: 'command has no divertible text',
-            }
-          }
-          const redirect = deps.redirect
-          if (!redirect) {
-            return { path: target.key, ok: false as const, error: 'redirect API unavailable' }
-          }
-          const title = target.pluginTitle?.trim()
-          const label: string | [string, string] = title ? [title, cmd] : cmd
-          const ok = redirect(label)
-          if (!ok) {
-            return { path: target.key, ok: false as const, error: 'redirect failed' }
-          }
-          return { path: target.key, ok: true as const, error: '' }
-        }
+): Promise<LaunchResult & { outcomes: LaunchOutcome[] }> {
+  // Paths can run in parallel; ZTools redirects must be sequential — each redirect
+  // becomes the host "current" plugin view and would otherwise race.
+  const pathTargets = targets.filter((t) => t.kind === 'path')
+  const ztoolsTargets = targets.filter((t) => t.kind === 'ztools')
 
-        const fullPath = target.path
-        if (!fullPath) {
-          return { path: target.key, ok: false as const, error: 'missing path' }
-        }
-        const res = await Promise.resolve(deps.openPath(fullPath))
-        if (!res?.success) {
-          return { path: target.key, ok: false as const, error: res?.error || 'open failed' }
-        }
-        return { path: target.key, ok: true as const, error: '' }
-      } catch (e: unknown) {
-        const message = e instanceof Error ? e.message : String(e)
-        return { path: target.key, ok: false as const, error: message }
-      }
-    }),
-  )
+  const pathOutcomes = await Promise.all(pathTargets.map((t) => launchOne(t, deps)))
+  const ztoolsOutcomes: LaunchOutcome[] = []
+  for (const target of ztoolsTargets) {
+    ztoolsOutcomes.push(await launchOne(target, deps))
+  }
 
-  const errors = settled.filter((s) => !s.ok).map((s) => ({ path: s.path, error: s.error }))
+  const outcomes = [...pathOutcomes, ...ztoolsOutcomes]
+  const errors = outcomes.filter((s) => !s.ok).map((s) => ({ path: s.path, error: s.error }))
   return {
-    success: settled.filter((s) => s.ok).length,
+    success: outcomes.filter((s) => s.ok).length,
     failed: errors.length,
     errors,
+    outcomes,
   }
 }
 

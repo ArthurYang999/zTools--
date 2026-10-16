@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
-import { launchPaths, launchTargets } from '../src/services/launcher'
+import {
+  countSuccessfulZtoolsLaunches,
+  launchPaths,
+  launchTargets,
+} from '../src/services/launcher'
 import { commandAppPath } from '../src/services/scanner/ztoolsPlugins'
 
 describe('launchPaths', () => {
@@ -45,5 +49,37 @@ describe('launchTargets', () => {
     )
     expect(result.failed).toBe(1)
     expect(result.errors[0].error).toMatch(/no divertible/)
+  })
+
+  it('runs ztools redirects sequentially after filesystem paths', async () => {
+    const order: string[] = []
+    const open = vi.fn(async (p: string) => {
+      order.push(`open:${p}`)
+      return { success: true }
+    })
+    const redirect = vi.fn((label: string | [string, string]) => {
+      order.push(`redirect:${Array.isArray(label) ? label.join('/') : label}`)
+      return true
+    })
+    const result = await launchTargets(
+      [
+        {
+          key: commandAppPath('a', 'cmd-a'),
+          kind: 'ztools',
+          pluginTitle: 'A',
+          launchCmd: 'cmd-a',
+        },
+        { key: '/b.exe', kind: 'path', path: '/b.exe' },
+        {
+          key: commandAppPath('c', 'cmd-c'),
+          kind: 'ztools',
+          pluginTitle: 'C',
+          launchCmd: 'cmd-c',
+        },
+      ],
+      { openPath: open, redirect },
+    )
+    expect(order).toEqual(['open:/b.exe', 'redirect:A/cmd-a', 'redirect:C/cmd-c'])
+    expect(countSuccessfulZtoolsLaunches(result.outcomes)).toBe(2)
   })
 })

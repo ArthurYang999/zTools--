@@ -31,7 +31,12 @@ import {
   saveGroup as saveGroupSvc,
   type GroupInput,
 } from './services/launchGroup'
-import { launchGroupApps, type LaunchTarget } from './services/launcher'
+import {
+  countSuccessfulZtoolsLaunches,
+  launchGroupApps,
+  ZTOOLS_REDIRECT_SETTLE_MS,
+  type LaunchTarget,
+} from './services/launcher'
 import { runFullScan } from './services/scanner'
 import { isZtoolsCommandPath } from './services/scanner/ztoolsPlugins'
 import type {
@@ -233,7 +238,11 @@ host().onPluginEnter(async (param) => {
     await Promise.resolve(
       host().showToast(`成功 ${result.success} / 失败 ${result.failed}`),
     )
-    // Kill process — only run when invoked
+    // redirect() switches the host "current" plugin to the target; calling
+    // outPlugin(true) immediately aborts that assembly (see main.log hide-view-abort-assembly).
+    if (countSuccessfulZtoolsLaunches(result.outcomes ?? []) > 0) {
+      await new Promise((r) => setTimeout(r, ZTOOLS_REDIRECT_SETTLE_MS))
+    }
     await Promise.resolve(host().outPlugin(true))
     return
   }
