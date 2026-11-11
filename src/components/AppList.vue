@@ -16,6 +16,7 @@ const props = defineProps<{
   canAddToCategory?: boolean
   targetCategoryName?: string
   canAddToGroup?: boolean
+  busy?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -27,6 +28,7 @@ const emit = defineEmits<{
   addSelectedToGroup: []
   removeFromCategory: [appId: string, categoryId: string]
   removeFromGroup: [appId: string, groupId: string]
+  launch: [appId: string]
 }>()
 
 const sourceFilter = ref<AppSourceFilter>('all')
@@ -342,6 +344,15 @@ function onRowClick(appId: string) {
           </div>
         </div>
         <button
+          class="btn btn-sm btn-primary row-launch"
+          type="button"
+          :disabled="busy"
+          title="启动"
+          @click.stop="emit('launch', app._id)"
+        >
+          启动
+        </button>
+        <button
           class="row-action"
           type="button"
           :disabled="!canAddToGroup"
@@ -444,6 +455,13 @@ function onRowClick(appId: string) {
 .row-check {
   pointer-events: none;
   flex-shrink: 0;
+}
+
+.row-launch {
+  flex-shrink: 0;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
 }
 
 .row-action {

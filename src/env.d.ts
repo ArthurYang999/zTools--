@@ -42,6 +42,7 @@ export interface BatchStartApi {
   retrySyncGroup: (groupId: string) => Promise<GroupDoc | null>
   reconcileFeatures: () => Promise<void>
   launchGroup: (groupId: string) => Promise<LaunchResult>
+  launchApp: (appId: string) => Promise<LaunchResult>
 }
 
 declare global {

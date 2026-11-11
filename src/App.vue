@@ -203,6 +203,28 @@ async function onTrialRun() {
   })
 }
 
+function showLaunchFeedback(result: LaunchResult, appName?: string) {
+  const prefix = appName ? `「${appName}」` : ''
+  const message =
+    result.failed === 0
+      ? `${prefix}已启动`
+      : `${prefix}启动失败：${result.errors[0]?.error || '未知错误'}`
+  const showToast = window.ztools?.showToast
+  if (typeof showToast === 'function') {
+    void Promise.resolve(showToast(message))
+    return
+  }
+  if (result.failed > 0) window.alert(message)
+}
+
+async function onLaunchApp(appId: string) {
+  const app = apps.value.find((a) => a._id === appId)
+  await withBusy(async () => {
+    const result = await api().launchApp(appId)
+    showLaunchFeedback(result, app?.name)
+  })
+}
+
 async function onCreateCategory(name: string) {
   const trimmed = name.trim()
   if (!trimmed) return
@@ -430,6 +452,7 @@ onMounted(async () => {
         :can-add-to-category="canAddToCategory"
         :target-category-name="selectedCategoryName"
         :can-add-to-group="canAddToGroup"
+        :busy="busy"
         @update:search-query="searchQuery = $event"
         @update:category-filter="categoryFilter = $event"
         @toggle-select="toggleSelect"
@@ -438,6 +461,7 @@ onMounted(async () => {
         @add-selected-to-group="addSelectedToGroup"
         @remove-from-category="removeAppFromCategory"
         @remove-from-group="removeAppFromGroup"
+        @launch="onLaunchApp"
       />
 
       <div class="right-col" :class="{ 'is-collapsed': groupCollapsed }">

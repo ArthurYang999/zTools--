@@ -99,6 +99,19 @@ function manualOpenFilters(): Array<{ name: string; extensions: string[] }> | un
   return undefined
 }
 
+function appToLaunchTarget(app: AppDoc): LaunchTarget | null {
+  if (app.source === 'ztools' || app.source === 'plugin' || isZtoolsCommandPath(app.path)) {
+    return {
+      key: app.path,
+      kind: 'ztools',
+      pluginTitle: app.pluginTitle || undefined,
+      launchCmd: app.launchCmd,
+    }
+  }
+  if (app.path) return { key: app.path, kind: 'path', path: app.path }
+  return null
+}
+
 async function resolveGroupTargets(group: GroupDoc): Promise<LaunchTarget[]> {
   const apps = await listAppsSvc(db())
   const byId = new Map(apps.map((a) => [a._id, a]))
@@ -106,18 +119,19 @@ async function resolveGroupTargets(group: GroupDoc): Promise<LaunchTarget[]> {
   for (const id of group.appIds) {
     const app = byId.get(id)
     if (!app) continue
-    if (app.source === 'ztools' || app.source === 'plugin' || isZtoolsCommandPath(app.path)) {
-      targets.push({
-        key: app.path,
-        kind: 'ztools',
-        pluginTitle: app.pluginTitle || undefined,
-        launchCmd: app.launchCmd,
-      })
-    } else if (app.path) {
-      targets.push({ key: app.path, kind: 'path', path: app.path })
-    }
+    const target = appToLaunchTarget(app)
+    if (target) targets.push(target)
   }
   return targets
+}
+
+async function executeLaunch(targets: LaunchTarget[]): Promise<LaunchResult> {
+  const z = host()
+  return launchGroupApps(
+    targets,
+    (p) => z.shellOpenPath(p),
+    (label, payload) => z.redirect(label, payload),
+  )
 }
 
 async function launchGroupById(groupId: string): Promise<LaunchResult> {
@@ -125,13 +139,27 @@ async function launchGroupById(groupId: string): Promise<LaunchResult> {
   if (!group) {
     return { success: 0, failed: 0, errors: [] }
   }
-  const targets = await resolveGroupTargets(group)
-  const z = host()
-  return launchGroupApps(
-    targets,
-    (p) => z.shellOpenPath(p),
-    (label, payload) => z.redirect(label, payload),
-  )
+  return executeLaunch(await resolveGroupTargets(group))
+}
+
+async function launchAppById(appId: string): Promise<LaunchResult> {
+  const app = (await db().get(appId)) as AppDoc | null
+  if (!app) {
+    return { success: 0, failed: 1, errors: [{ path: appId, error: 'app not found' }] }
+  }
+  const target = appToLaunchTarget(app)
+  if (!target) {
+    return { success: 0, failed: 1, errors: [{ path: app.path || appId, error: 'not launchable' }] }
+  }
+  const result = await executeLaunch([target])
+  // 管理页启动指令会 redirect；延迟退出以免打断目标插件，且不阻塞 toast
+  if (countSuccessfulZtoolsLaunches(result.outcomes ?? []) > 0) {
+    void (async () => {
+      await new Promise((r) => setTimeout(r, ZTOOLS_REDIRECT_SETTLE_MS))
+      await Promise.resolve(host().outPlugin(true))
+    })()
+  }
+  return result
 }
 
 const batchStart = {
@@ -220,6 +248,7 @@ const batchStart = {
   reconcileFeatures: (): Promise<void> => reconcileFeatures(db(), featureApi()),
 
   launchGroup: (groupId: string): Promise<LaunchResult> => launchGroupById(groupId),
+  launchApp: (appId: string): Promise<LaunchResult> => launchAppById(appId),
 }
 
 window.batchStart = batchStart
