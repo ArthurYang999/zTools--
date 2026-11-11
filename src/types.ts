@@ -9,7 +9,8 @@ export interface AppDoc {
   path: string
   icon?: string | null
   source: AppSource
-  categoryId: string | null
+  /** An app may belong to multiple categories */
+  categoryIds: string[]
   platform: Platform
   /** Present when source is ztools (or legacy plugin) */
   pluginName?: string
@@ -35,11 +36,19 @@ export interface GroupDoc {
   featureSynced: boolean
 }
 
+export type UiPrefs = {
+  /** Category sidebar collapsed to icon rail; default true */
+  categoryCollapsed?: boolean
+  /** Group column collapsed to narrow strip; default false */
+  groupCollapsed?: boolean
+}
+
 export interface SettingsDoc {
   _id: 'settings'
   _rev?: string
   customScanDirs: string[]
   lastScanAt: number | null
+  ui?: UiPrefs
 }
 
 export interface LaunchResult {

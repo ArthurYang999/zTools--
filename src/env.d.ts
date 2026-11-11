@@ -6,6 +6,7 @@ import type {
   GroupDoc,
   LaunchResult,
   SettingsDoc,
+  UiPrefs,
 } from './types'
 
 declare module '*.vue' {
@@ -26,10 +27,12 @@ export interface BatchStartApi {
   listCategories: () => Promise<CategoryDoc[]>
   listGroups: () => Promise<GroupDoc[]>
   getSettings: () => Promise<SettingsDoc>
+  patchUiPrefs: (patch: UiPrefs) => Promise<SettingsDoc>
   createCategory: (name: string) => Promise<CategoryDoc>
   renameCategory: (id: string, name: string) => Promise<CategoryDoc>
   deleteCategory: (id: string) => Promise<void>
   assignCategory: (appId: string, categoryId: string | null) => Promise<AppDoc>
+  removeCategory: (appId: string, categoryId: string) => Promise<AppDoc>
   addManualApp: () => Promise<AppDoc | null>
   addCustomScanDir: () => Promise<SettingsDoc | null>
   removeCustomScanDir: (dir: string) => Promise<SettingsDoc>
@@ -47,6 +50,21 @@ declare global {
     ztools?: {
       showToast?: (message: string, options?: Record<string, unknown>) => unknown
       setExpendHeight?: (height: number) => void
+      getThemeInfo?: () => {
+        isDark?: boolean
+        primaryColor?: string
+        customColor?: string
+        windowMaterial?: string
+      }
+      onThemeChange?: (
+        callback: (info: {
+          isDark?: boolean
+          primaryColor?: string
+          customColor?: string
+          windowMaterial?: string
+        }) => void,
+      ) => void
+      isDarkColors?: () => boolean
     }
   }
 }

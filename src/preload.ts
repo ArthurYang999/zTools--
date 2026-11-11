@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
   assignCategory as assignCategorySvc,
+  removeCategory as removeCategorySvc,
   listApps as listAppsSvc,
   upsertApp,
 } from './services/appLibrary'
@@ -15,6 +16,7 @@ import {
   getSettings as getSettingsSvc,
   makeAppId,
   newId,
+  patchUiPrefs as patchUiPrefsSvc,
   type ZtoolsDb,
 } from './services/db'
 import { routePluginEnter } from './services/enterRouter'
@@ -46,6 +48,7 @@ import type {
   LaunchResult,
   Platform,
   SettingsDoc,
+  UiPrefs,
 } from './types'
 
 type ZtoolsHost = {
@@ -136,6 +139,7 @@ const batchStart = {
   listCategories: (): Promise<CategoryDoc[]> => listCategoriesSvc(db()),
   listGroups: (): Promise<GroupDoc[]> => listGroupsSvc(db()),
   getSettings: (): Promise<SettingsDoc> => getSettingsSvc(db()),
+  patchUiPrefs: (patch: UiPrefs): Promise<SettingsDoc> => patchUiPrefsSvc(patch, db()),
 
   createCategory: (name: string): Promise<CategoryDoc> => createCategorySvc(db(), name),
   renameCategory: (id: string, name: string): Promise<CategoryDoc> =>
@@ -143,6 +147,8 @@ const batchStart = {
   deleteCategory: (id: string): Promise<void> => deleteCategorySvc(db(), id),
   assignCategory: (appId: string, categoryId: string | null): Promise<AppDoc> =>
     assignCategorySvc(db(), appId, categoryId),
+  removeCategory: (appId: string, categoryId: string): Promise<AppDoc> =>
+    removeCategorySvc(db(), appId, categoryId),
 
   async addManualApp(): Promise<AppDoc | null> {
     const z = host()
@@ -161,7 +167,7 @@ const batchStart = {
       path: filePath,
       icon,
       source: 'manual',
-      categoryId: null,
+      categoryIds: [],
       platform: currentPlatform(),
     })
   },

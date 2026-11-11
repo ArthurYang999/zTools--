@@ -37,8 +37,10 @@ export async function deleteCategory(db: ZtoolsDb, id: string): Promise<void> {
 
   const apps = await listApps(db)
   for (const app of apps) {
-    if (app.categoryId === id) {
-      await upsertApp(db, { ...app, categoryId: null })
-    }
+    if (!app.categoryIds.includes(id)) continue
+    await upsertApp(db, {
+      ...app,
+      categoryIds: app.categoryIds.filter((cid) => cid !== id),
+    })
   }
 }

@@ -11,23 +11,66 @@ function isZtoolsSource(source: AppSource): boolean {
   return source === 'ztools' || source === 'plugin'
 }
 
+/** Migrate legacy single `categoryId` → `categoryIds` */
+export function normalizeApp(raw: AppDoc & { categoryId?: string | null }): AppDoc {
+  const legacyId = raw.categoryId
+  const fromArray = Array.isArray(raw.categoryIds) ? raw.categoryIds.filter(Boolean) : []
+  const categoryIds =
+    fromArray.length > 0
+      ? [...new Set(fromArray)]
+      : legacyId
+        ? [legacyId]
+        : []
+  const { categoryId: _legacy, ...rest } = raw as AppDoc & { categoryId?: string | null }
+  return { ...rest, categoryIds }
+}
+
 export async function upsertApp(db: ZtoolsDb, app: AppDoc): Promise<AppDoc> {
-  await db.put(app)
-  return (await db.get(app._id)) as AppDoc
+  const normalized = normalizeApp(app)
+  await db.put(normalized)
+  return (await db.get(normalized._id)) as AppDoc
 }
 
 export async function listApps(db: ZtoolsDb): Promise<AppDoc[]> {
-  return (await db.allDocs('app:')) as AppDoc[]
+  const docs = (await db.allDocs('app:')) as Array<AppDoc & { categoryId?: string | null }>
+  return docs.map(normalizeApp)
 }
 
+/**
+ * Add app to a category (multi-membership). Pass `null` to clear all categories.
+ */
 export async function assignCategory(
   db: ZtoolsDb,
   appId: string,
   categoryId: string | null,
 ): Promise<AppDoc> {
-  const existing = (await db.get(appId)) as AppDoc | null
+  const existing = (await db.get(appId)) as (AppDoc & { categoryId?: string | null }) | null
   if (!existing) throw new Error(`App not found: ${appId}`)
-  return upsertApp(db, { ...existing, categoryId })
+  const current = normalizeApp(existing)
+  if (categoryId == null) {
+    return upsertApp(db, { ...current, categoryIds: [] })
+  }
+  if (current.categoryIds.includes(categoryId)) return current
+  return upsertApp(db, {
+    ...current,
+    categoryIds: [...current.categoryIds, categoryId],
+  })
+}
+
+/** Remove one category membership from an app. */
+export async function removeCategory(
+  db: ZtoolsDb,
+  appId: string,
+  categoryId: string,
+): Promise<AppDoc> {
+  const existing = (await db.get(appId)) as (AppDoc & { categoryId?: string | null }) | null
+  if (!existing) throw new Error(`App not found: ${appId}`)
+  const current = normalizeApp(existing)
+  if (!current.categoryIds.includes(categoryId)) return current
+  return upsertApp(db, {
+    ...current,
+    categoryIds: current.categoryIds.filter((id) => id !== categoryId),
+  })
 }
 
 export async function removeApp(db: ZtoolsDb, appId: string): Promise<void> {
@@ -88,7 +131,7 @@ export async function mergeScannedApps(
         if (item.pluginTitle) updated.pluginTitle = item.pluginTitle
         if (item.launchCmd !== undefined) updated.launchCmd = item.launchCmd
       }
-      toWrite.push(updated)
+      toWrite.push(normalizeApp(updated))
       byPath.set(key, updated)
     } else {
       const id = item.stableIdHint
@@ -102,7 +145,7 @@ export async function mergeScannedApps(
         path: item.path,
         icon: item.icon ?? null,
         source: isZtoolsSource(source) ? 'ztools' : source,
-        categoryId: null,
+        categoryIds: [],
         platform: item.platform,
         ...(isZtoolsSource(source)
           ? {

@@ -158,8 +158,9 @@ function patchDraft(partial: Partial<GroupDraft>) {
 
 <style scoped>
 .group-panel {
-  width: 300px;
-  flex-shrink: 0;
+  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 
 .group-list {
@@ -167,6 +168,7 @@ function patchDraft(partial: Partial<GroupDraft>) {
   overflow: auto;
   border-bottom: 1px solid var(--border);
   padding: 8px;
+  background: var(--surface-2);
 }
 
 .empty-hint {
@@ -223,12 +225,6 @@ function patchDraft(partial: Partial<GroupDraft>) {
 
 .source-badge {
   margin-left: 6px;
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 5px;
-  border-radius: 4px;
-  color: #1d4ed8;
-  background: #dbeafe;
 }
 
 .missing {

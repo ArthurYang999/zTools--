@@ -4,20 +4,35 @@ import {
   listApps,
   mergeScannedApps,
   reconcileMissingPluginApps,
+  normalizeApp,
 } from '../src/services/appLibrary'
 import { makeAppId } from '../src/services/db'
 import { commandAppPath, pluginAppPath } from '../src/services/scanner/ztoolsPlugins'
 import { createMemoryDb } from './mocks/memoryDb'
 
 describe('appLibrary', () => {
-  it('mergeScannedApps keeps categoryId on path match', async () => {
+  it('normalizeApp migrates legacy categoryId', () => {
+    const app = normalizeApp({
+      _id: makeAppId('1'),
+      name: 'A',
+      path: 'C:/a.exe',
+      source: 'manual',
+      categoryIds: [],
+      categoryId: 'category:x',
+      platform: 'win32',
+    } as Parameters<typeof normalizeApp>[0])
+    expect(app.categoryIds).toEqual(['category:x'])
+    expect('categoryId' in app).toBe(false)
+  })
+
+  it('mergeScannedApps keeps categoryIds on path match', async () => {
     const db = createMemoryDb()
     await upsertApp(db, {
       _id: makeAppId('1'),
       name: 'Old',
       path: 'C:/Tool/a.exe',
       source: 'scan',
-      categoryId: 'category:x',
+      categoryIds: ['category:x', 'category:y'],
       platform: 'win32',
     })
     await mergeScannedApps(db, [
@@ -25,7 +40,7 @@ describe('appLibrary', () => {
     ])
     const apps = await listApps(db)
     expect(apps).toHaveLength(1)
-    expect(apps[0].categoryId).toBe('category:x')
+    expect(apps[0].categoryIds).toEqual(['category:x', 'category:y'])
     expect(apps[0].name).toBe('New')
   })
 
@@ -36,7 +51,7 @@ describe('appLibrary', () => {
       name: 'Old',
       path: 'C:/Tool/a.exe',
       source: 'scan',
-      categoryId: 'category:x',
+      categoryIds: ['category:x'],
       platform: 'win32',
     })
     await mergeScannedApps(db, [
@@ -44,7 +59,7 @@ describe('appLibrary', () => {
     ])
     const apps = await listApps(db)
     expect(apps).toHaveLength(1)
-    expect(apps[0].categoryId).toBe('category:x')
+    expect(apps[0].categoryIds).toEqual(['category:x'])
     expect(apps[0].name).toBe('New')
   })
 
@@ -80,6 +95,7 @@ describe('appLibrary', () => {
     expect(apps[0]._id).toBe(makeAppId(`cmd:colors:${encodeURIComponent('颜色助手')}`))
     expect(apps[0].source).toBe('ztools')
     expect(apps[0].launchCmd).toBe('颜色助手')
+    expect(apps[0].categoryIds).toEqual([])
   })
 
   it('reconcile removes missing cmds and legacy plugin rows', async () => {
@@ -110,7 +126,7 @@ describe('appLibrary', () => {
       name: 'Legacy',
       path: pluginAppPath('legacy'),
       source: 'plugin',
-      categoryId: null,
+      categoryIds: [],
       platform: 'win32',
       launchCmd: 'x',
     })

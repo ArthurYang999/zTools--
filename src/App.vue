@@ -1,16 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import AppList from './components/AppList.vue'
+import AppList, { type CategoryFilter } from './components/AppList.vue'
 import CategorySidebar from './components/CategorySidebar.vue'
 import GroupPanel, { type GroupDraft } from './components/GroupPanel.vue'
 import TopBar from './components/TopBar.vue'
+import { useHostTheme } from './composables/useHostTheme'
 import type { AppDoc, CategoryDoc, GroupDoc, LaunchResult, SettingsDoc } from './types'
+
+useHostTheme()
 
 const apps = ref<AppDoc[]>([])
 const categories = ref<CategoryDoc[]>([])
 const groups = ref<GroupDoc[]>([])
 const settings = ref<SettingsDoc | null>(null)
 
+const categoryFilter = ref<CategoryFilter>('all')
+/** 左侧栏选中的分类，仅用于 ← 加入，不影响中间筛选 */
 const selectedCategoryId = ref<string | null>(null)
 const selectedGroupId = ref<string | null>(null)
 const selectedAppIds = ref<string[]>([])
@@ -21,12 +26,39 @@ const saveError = ref<string | null>(null)
 const busy = ref(false)
 const loadError = ref<string | null>(null)
 
+/** Defaults match design: category collapsed, group expanded */
+const categoryCollapsed = ref(true)
+const groupCollapsed = ref(false)
+
 const api = () => window.batchStart
 
 const lastScanAt = computed(() => settings.value?.lastScanAt ?? null)
 const hasApps = computed(() => apps.value.length > 0)
 const hasGroups = computed(() => groups.value.length > 0)
 const canTrialRun = computed(() => selectedGroupId.value != null || !!draft.value?.id)
+
+/** Overlay unsaved draft membership so list tags stay in sync */
+const displayGroups = computed<GroupDoc[]>(() => {
+  const list = groups.value.map((g) => ({ ...g, appIds: [...g.appIds] }))
+  const d = draft.value
+  if (!d) return list
+  if (d.id) {
+    const idx = list.findIndex((g) => g._id === d.id)
+    if (idx >= 0) {
+      list[idx] = { ...list[idx], name: d.name, appIds: [...d.appIds] }
+    }
+    return list
+  }
+  list.push({
+    _id: 'group:__draft__',
+    name: d.name.trim() || '新启动组',
+    cmds: [],
+    appIds: [...d.appIds],
+    order: Number.MAX_SAFE_INTEGER,
+    featureSynced: false,
+  })
+  return list
+})
 
 async function loadAll() {
   loadError.value = null
@@ -45,9 +77,34 @@ async function loadAll() {
     categories.value = c
     groups.value = g
     settings.value = s
+    categoryCollapsed.value = s.ui?.categoryCollapsed ?? true
+    groupCollapsed.value = s.ui?.groupCollapsed ?? false
   } catch (err) {
     loadError.value = err instanceof Error ? err.message : String(err)
   }
+}
+
+async function persistUiPrefs(patch: { categoryCollapsed?: boolean; groupCollapsed?: boolean }) {
+  try {
+    const next = await api().patchUiPrefs(patch)
+    settings.value = next
+    categoryCollapsed.value = next.ui?.categoryCollapsed ?? categoryCollapsed.value
+    groupCollapsed.value = next.ui?.groupCollapsed ?? groupCollapsed.value
+  } catch {
+    // UI prefs are best-effort
+  }
+}
+
+function toggleCategoryCollapsed() {
+  const next = !categoryCollapsed.value
+  categoryCollapsed.value = next
+  void persistUiPrefs({ categoryCollapsed: next })
+}
+
+function toggleGroupCollapsed() {
+  const next = !groupCollapsed.value
+  groupCollapsed.value = next
+  void persistUiPrefs({ groupCollapsed: next })
 }
 
 function syncDraftFromGroup(group: GroupDoc) {
@@ -146,21 +203,21 @@ async function onTrialRun() {
   })
 }
 
-async function onCreateCategory() {
-  const name = window.prompt('新分类名称')
-  if (!name?.trim()) return
+async function onCreateCategory(name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) return
   await withBusy(async () => {
-    await api().createCategory(name.trim())
+    const created = await api().createCategory(trimmed)
     await loadAll()
+    selectedCategoryId.value = created._id
   })
 }
 
-async function onRenameCategory(id: string) {
-  const current = categories.value.find((c) => c._id === id)
-  const name = window.prompt('重命名分类', current?.name ?? '')
-  if (!name?.trim()) return
+async function onRenameCategory(id: string, name: string) {
+  const trimmed = name.trim()
+  if (!trimmed) return
   await withBusy(async () => {
-    await api().renameCategory(id, name.trim())
+    await api().renameCategory(id, trimmed)
     await loadAll()
   })
 }
@@ -169,6 +226,7 @@ async function onDeleteCategory(id: string) {
   if (!window.confirm('删除该分类？其下应用将回到未分类。')) return
   await withBusy(async () => {
     await api().deleteCategory(id)
+    if (categoryFilter.value === id) categoryFilter.value = 'all'
     if (selectedCategoryId.value === id) selectedCategoryId.value = null
     await loadAll()
   })
@@ -181,19 +239,88 @@ function toggleSelect(appId: string) {
   selectedAppIds.value = [...set]
 }
 
-async function onAssignCategory(appId: string, categoryId: string | null) {
-  await withBusy(async () => {
-    await api().assignCategory(appId, categoryId)
-    await loadAll()
-  })
-}
-
 function addSelectedToGroup() {
   if (!draft.value) createGroup()
   const current = draft.value!
   const set = new Set(current.appIds)
   for (const id of selectedAppIds.value) set.add(id)
   draft.value = { ...current, appIds: [...set] }
+}
+
+const canAddToGroup = computed(() => draft.value != null)
+
+function addAppToGroup(appId: string) {
+  if (!draft.value) return
+  const current = draft.value
+  if (current.appIds.includes(appId)) return
+  draft.value = { ...current, appIds: [...current.appIds, appId] }
+}
+
+const canAddToCategory = computed(() => selectedCategoryId.value != null)
+
+const selectedCategoryName = computed(() => {
+  const id = selectedCategoryId.value
+  if (!id) return ''
+  return categories.value.find((c) => c._id === id)?.name ?? '分类'
+})
+
+async function addAppToCategory(appId: string) {
+  const categoryId = selectedCategoryId.value
+  if (!categoryId) return
+  await withBusy(async () => {
+    await api().assignCategory(appId, categoryId)
+    await loadAll()
+  })
+}
+
+async function removeAppFromCategory(appId: string, categoryId: string) {
+  await withBusy(async () => {
+    await api().removeCategory(appId, categoryId)
+    await loadAll()
+  })
+}
+
+function patchDraftMembership(appId: string, groupId: string) {
+  const d = draft.value
+  if (!d) return
+  const isTarget =
+    (d.id != null && d.id === groupId) || (!d.id && groupId === 'group:__draft__')
+  if (!isTarget) return
+  draft.value = {
+    ...d,
+    appIds: d.appIds.filter((id) => id !== appId),
+  }
+}
+
+async function removeAppFromGroup(appId: string, groupId: string) {
+  patchDraftMembership(appId, groupId)
+  if (groupId === 'group:__draft__') return
+
+  const group = groups.value.find((g) => g._id === groupId)
+  if (!group) return
+
+  const nextIds = group.appIds.filter((id) => id !== appId)
+  await withBusy(async () => {
+    if (nextIds.length === 0) {
+      await api().deleteGroup(groupId)
+      if (draft.value?.id === groupId) {
+        draft.value = null
+        selectedGroupId.value = null
+      }
+    } else {
+      const saved = await api().saveGroup(
+        {
+          name: group.name,
+          cmds: [...group.cmds],
+          appIds: nextIds,
+          order: group.order,
+        },
+        groupId,
+      )
+      if (draft.value?.id === groupId) syncDraftFromGroup(saved)
+    }
+    await loadAll()
+  })
 }
 
 function removeMember(appId: string) {
@@ -284,47 +411,71 @@ onMounted(async () => {
       <CategorySidebar
         :categories="categories"
         :selected-category-id="selectedCategoryId"
+        :collapsed="categoryCollapsed"
+        :busy="busy"
         @select="selectedCategoryId = $event"
         @create="onCreateCategory"
         @rename="onRenameCategory"
         @delete="onDeleteCategory"
+        @toggle-collapsed="toggleCategoryCollapsed"
       />
 
       <AppList
         :apps="apps"
         :categories="categories"
-        :selected-category-id="selectedCategoryId"
+        :groups="displayGroups"
+        :category-filter="categoryFilter"
         :selected-app-ids="selectedAppIds"
         :search-query="searchQuery"
+        :can-add-to-category="canAddToCategory"
+        :target-category-name="selectedCategoryName"
+        :can-add-to-group="canAddToGroup"
         @update:search-query="searchQuery = $event"
+        @update:category-filter="categoryFilter = $event"
         @toggle-select="toggleSelect"
-        @assign-category="onAssignCategory"
+        @add-to-category="addAppToCategory"
+        @add-to-group="addAppToGroup"
         @add-selected-to-group="addSelectedToGroup"
+        @remove-from-category="removeAppFromCategory"
+        @remove-from-group="removeAppFromGroup"
       />
 
-      <div class="right-col">
-        <div v-if="!hasGroups && !draft" class="panel empty-groups">
-          <div class="empty-state">
-            <div>还没有启动组</div>
-            <button class="btn btn-primary" type="button" @click="createGroup">创建启动组</button>
+      <div class="right-col" :class="{ 'is-collapsed': groupCollapsed }">
+        <button
+          class="btn-icon right-col__toggle"
+          type="button"
+          :title="groupCollapsed ? '展开启动组' : '收起启动组'"
+          :aria-expanded="!groupCollapsed"
+          @click="toggleGroupCollapsed"
+        >
+          <span aria-hidden="true">{{ groupCollapsed ? '‹' : '›' }}</span>
+        </button>
+
+        <template v-if="!groupCollapsed">
+          <div v-if="!hasGroups && !draft" class="panel empty-groups">
+            <div class="empty-state">
+              <div>还没有启动组</div>
+              <button class="btn btn-primary" type="button" @click="createGroup">创建启动组</button>
+            </div>
           </div>
-        </div>
-        <GroupPanel
-          v-else
-          :groups="groups"
-          :apps="apps"
-          :selected-group-id="selectedGroupId"
-          :draft="draft"
-          :save-error="saveError"
-          :busy="busy"
-          @select="selectGroup"
-          @create="createGroup"
-          @update:draft="draft = $event"
-          @save="onSaveGroup"
-          @delete="onDeleteGroup"
-          @retry-sync="onRetrySync"
-          @remove-member="removeMember"
-        />
+          <GroupPanel
+            v-else
+            :groups="groups"
+            :apps="apps"
+            :selected-group-id="selectedGroupId"
+            :draft="draft"
+            :save-error="saveError"
+            :busy="busy"
+            @select="selectGroup"
+            @create="createGroup"
+            @update:draft="draft = $event"
+            @save="onSaveGroup"
+            @delete="onDeleteGroup"
+            @retry-sync="onRetrySync"
+            @remove-member="removeMember"
+          />
+        </template>
+        <div v-else class="right-rail" title="启动组">组</div>
       </div>
     </div>
   </div>
@@ -355,16 +506,55 @@ onMounted(async () => {
 }
 
 .right-col {
-  width: 300px;
+  position: relative;
+  width: var(--group-col);
   flex-shrink: 0;
   display: flex;
   min-height: 0;
+  transition: width var(--ease);
+}
+
+.right-col.is-collapsed {
+  width: var(--rail);
+}
+
+.right-col__toggle {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+}
+
+.right-col.is-collapsed .right-col__toggle {
+  left: 50%;
+  transform: translateX(-50%);
 }
 
 .right-col > .panel,
 .right-col > :deep(.group-panel) {
   flex: 1;
   width: 100%;
+  min-width: 0;
+}
+
+.right-col:not(.is-collapsed) :deep(.panel-header) {
+  padding-left: 40px;
+}
+
+.right-rail {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 44px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  writing-mode: vertical-rl;
+  letter-spacing: 0.2em;
 }
 
 .empty-groups {

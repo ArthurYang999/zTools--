@@ -23,16 +23,16 @@ function formatScanAt(ts: number | null): string {
 
 <template>
   <header class="top-bar">
-    <div class="top-bar__title">批量启动</div>
+    <div class="top-bar__brand">
+      <div class="top-bar__title">批量启动</div>
+      <div class="top-bar__meta muted">上次扫描：{{ formatScanAt(lastScanAt) }}</div>
+    </div>
     <div class="toolbar-row">
-      <button class="btn btn-primary" type="button" :disabled="busy" @click="emit('scan')">
-        扫描
-      </button>
-      <button class="btn" type="button" :disabled="busy" @click="emit('addDir')">
+      <button class="btn btn-ghost" type="button" :disabled="busy" @click="emit('addDir')">
         添加目录
       </button>
       <button
-        class="btn"
+        class="btn btn-ghost"
         type="button"
         :disabled="busy || !canTrialRun"
         title="试跑当前选中的启动组"
@@ -40,8 +40,10 @@ function formatScanAt(ts: number | null): string {
       >
         试跑当前组
       </button>
+      <button class="btn btn-primary" type="button" :disabled="busy" @click="emit('scan')">
+        扫描
+      </button>
     </div>
-    <div class="top-bar__meta muted">上次扫描：{{ formatScanAt(lastScanAt) }}</div>
   </header>
 </template>
 
@@ -49,20 +51,31 @@ function formatScanAt(ts: number | null): string {
 .top-bar {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   padding: 10px 14px;
-  background: var(--surface);
+  background: transparent;
   border-bottom: 1px solid var(--border);
 }
 
+.top-bar__brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
 .top-bar__title {
-  font-weight: 700;
+  font-weight: 650;
   font-size: 15px;
+  letter-spacing: 0.01em;
   white-space: nowrap;
 }
 
 .top-bar__meta {
-  margin-left: auto;
+  font-size: 11px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 </style>
